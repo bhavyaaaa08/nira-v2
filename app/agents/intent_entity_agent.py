@@ -162,14 +162,20 @@ EXTENSION_PHRASES = [
 
 PENALTY_QUESTION_PHRASES = [
     "why late fee",
+    "why is there a late fee",
+    "why there is a late fee",
     "why penalty",
+    "why is there a penalty",
     "why charge",
+    "why is there a charge",
     "late fee kya",
     "penalty kya",
     "fee kyun",
     "charge kyun",
     "what is this charge",
     "what is late fee",
+    "what is this late fee",
+    "late fee",
 ]
 
 WAIVER_PHRASES = [
