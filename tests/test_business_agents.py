@@ -60,9 +60,11 @@ def test_cannot_pay_offers_extension_review():
 
     response = loan_agent.respond(state, intent_result)
 
-    assert response.outcome == "needs_extension_review"
-    assert response.next_phase == CallPhase.ESCALATION
-    assert "extension" in response.response_text.lower()
+    assert response.outcome == "extension_review_offered"
+    assert "executive" in response.response_text.lower()
+    assert "review" in response.response_text.lower()
+    assert "would you like me to raise" in response.response_text.lower()
+    assert "offer_extension_review" in response.actions
 
 
 def test_late_fee_question():

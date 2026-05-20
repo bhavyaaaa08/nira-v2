@@ -20,6 +20,7 @@ class AgentName(str, Enum):
     ORCHESTRATOR = "orchestrator_agent"
     IDENTITY = "identity_agent"
     INTENT_ENTITY = "intent_entity_agent"
+    CONTEXT_RESOLVER = "context_resolver_agent"
     LOAN_SERVICING = "loan_servicing_agent"
     PAYMENT_OPERATIONS = "payment_operations_agent"
     KYC = "kyc_agent"
@@ -30,6 +31,7 @@ class AgentName(str, Enum):
     RESPONSE_JUDGE = "response_judge_agent"
     SUMMARY = "summary_agent"
     AUTOMATION = "automation_agent"
+    
 
 class IdentityStatus(str, Enum):
     VERIFIED = "verified"
@@ -58,8 +60,19 @@ class Intent(str, Enum):
 
     ESCALATION_REQUEST = "escalation_request"
     CLOSING = "closing"
+    CONFIRM_PENDING_ACTION = "confirm_pending_action"
+    CANCEL_PENDING_ACTION = "cancel_pending_action"
     GENERAL = "general"
     UNKNOWN = "unknown"
+
+
+class PendingAction(str, Enum):
+    CONFIRM_WAIVER_REVIEW = "confirm_waiver_review"
+    CONFIRM_EXTENSION_REVIEW = "confirm_extension_review"
+    CONFIRM_ESCALATION = "confirm_escalation"
+    CONFIRM_KYC_UPDATE = "confirm_kyc_update"
+    CONFIRM_DISPUTE_REVIEW = "confirm_dispute_review"
+    CONFIRM_COMPLAINT_REGISTRATION = "confirm_complaint_registration"
 
 
 class RiskLevel(str, Enum):

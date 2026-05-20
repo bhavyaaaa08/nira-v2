@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any
 from uuid import uuid4
 
-from app.core.enums import CallPhase, Intent, Language, PaymentStatus, RiskLevel
+from app.core.enums import CallPhase, Intent, Language, PaymentStatus, PendingAction, RiskLevel
 from app.core.schemas import CustomerProfile, LoanAccount
 
 
@@ -53,11 +53,26 @@ class CallState:
     outcome: Optional[str] = None
     outcome_detail: Optional[str] = None
 
+    pending_action: Optional[PendingAction] = None
+    pending_action_data: Dict[str, Any] = field(default_factory=dict)
+
     conversation: List[ConversationTurn] = field(default_factory=list)
     decision_trace: List[Dict[str, Any]] = field(default_factory=list)
 
     def advance_to(self, phase: CallPhase) -> None:
         self.phase = phase
+
+    def set_pending_action(
+        self,
+        action: PendingAction,
+        data: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        self.pending_action = action
+        self.pending_action_data = data or {}
+
+    def clear_pending_action(self) -> None:
+        self.pending_action = None
+        self.pending_action_data = {}
 
     def add_turn(self, role: str, content: str, metadata: Optional[Dict[str, Any]] = None) -> None:
         self.conversation.append(
@@ -155,4 +170,6 @@ class CallState:
             f"Risk: {self.risk_level.value} ({self.risk_score}/100)\n"
             f"Payment status: {self.payment_status.value}\n"
             f"Outcome: {self.outcome or 'not_decided'}"
+            f"Pending action: {self.pending_action.value if self.pending_action else 'none'}"
+
         )

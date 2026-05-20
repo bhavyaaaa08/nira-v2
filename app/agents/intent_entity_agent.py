@@ -56,10 +56,61 @@ PAYMENT_WORDS = [
     "loan app",
 ]
 
+
+PROMISE_TO_PAY_PHRASES = [
+    "i will pay",
+    "i'll pay",
+    "will pay",
+    "i can pay",
+    "i will do it",
+    "i'll do it",
+    "i will make the payment",
+    "i can make the payment",
+    "i will clear",
+    "i'll clear",
+    "i will settle",
+    "i'll settle",
+    "will clear",
+    "will settle",
+    "payment next week",
+    "pay next week",
+    "next week",
+    "tomorrow",
+    "by tomorrow",
+    "today evening",
+    "by evening",
+    "by tonight",
+    "by morning",
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+    "kar dunga",
+    "kar dungi",
+    "kar denge",
+    "payment kar dunga",
+    "payment kar dungi",
+    "pay kar dunga",
+    "pay kar dungi",
+    "next week kar dunga",
+    "next week kar dungi",
+    "jama kar dunga",
+    "jama kar dungi",
+    "de dunga",
+    "de dungi",
+]
+
+
 COMMITMENT_WORDS = [
     "will pay",
     "i'll pay",
     "i will pay",
+    "i can pay",
+    "i will do it",
+    "i'll do it",
     "pay kar dunga",
     "pay kar dungi",
     "payment kar dunga",
@@ -72,7 +123,9 @@ COMMITMENT_WORDS = [
     "jama kar",
     "transfer kar",
     "clear kar",
+    "settle kar",
 ]
+
 
 TIME_WORDS = [
     "today",
@@ -89,9 +142,18 @@ TIME_WORDS = [
     "day after tomorrow",
     "friday",
     "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "saturday",
+    "sunday",
     "next week",
     "end of week",
+    "by evening",
+    "by tonight",
+    "by morning",
 ]
+
 
 PAYMENT_DONE_PHRASES = [
     "already paid",
@@ -108,6 +170,7 @@ PAYMENT_DONE_PHRASES = [
     "i paid",
 ]
 
+
 PAYMENT_METHOD_PHRASES = [
     "how do i pay",
     "how to pay",
@@ -122,6 +185,7 @@ PAYMENT_METHOD_PHRASES = [
     "app se",
 ]
 
+
 PARTIAL_PAYMENT_PHRASES = [
     "partial payment",
     "part payment",
@@ -133,6 +197,7 @@ PARTIAL_PAYMENT_PHRASES = [
     "some amount",
     "part of the amount",
 ]
+
 
 CANNOT_PAY_PHRASES = [
     "cannot pay",
@@ -146,7 +211,17 @@ CANNOT_PAY_PHRASES = [
     "abhi nahi de sakti",
     "not able to pay",
     "financial problem",
+    "salary nahi aayi",
+    "wont be able to pay",
+    "won't be able to pay",
+    "will not be able to pay",
+    "i wont be able to pay",
+    "i won't be able to pay",
+    "i cannot make the payment",
+    "i cant make the payment",
+    "i can't make the payment",
 ]
+
 
 EXTENSION_PHRASES = [
     "need more time",
@@ -159,6 +234,7 @@ EXTENSION_PHRASES = [
     "time chahiye",
     "baad mein",
 ]
+
 
 PENALTY_QUESTION_PHRASES = [
     "why late fee",
@@ -178,15 +254,38 @@ PENALTY_QUESTION_PHRASES = [
     "late fee",
 ]
 
-WAIVER_PHRASES = [
+
+WAIVER_DIRECT_PHRASES = [
+    "waiver",
     "waive",
+    "waive off",
+    "fee waiver",
+    "late fee waiver",
+    "can i get a waiver",
+    "can you waive",
+    "maaf",
+    "maafi",
+]
+
+
+WAIVER_ACTION_PHRASES = [
     "remove",
     "reverse",
     "cancel",
     "hata",
-    "maaf",
     "kam",
 ]
+
+
+FEE_WORDS = [
+    "late fee",
+    "fee",
+    "penalty",
+    "charge",
+    "charges",
+    "fine",
+]
+
 
 ESCALATION_PHRASES = [
     "human agent",
@@ -201,6 +300,7 @@ ESCALATION_PHRASES = [
     "insaan se baat",
 ]
 
+
 DISPUTE_PHRASES = [
     "wrong amount",
     "galat amount",
@@ -214,6 +314,7 @@ DISPUTE_PHRASES = [
     "mistake",
 ]
 
+
 FRAUD_PHRASES = [
     "fraud",
     "scam",
@@ -225,6 +326,7 @@ FRAUD_PHRASES = [
     "dhokha",
     "fake loan",
 ]
+
 
 COMPLAINT_PHRASES = [
     "complaint",
@@ -239,6 +341,7 @@ COMPLAINT_PHRASES = [
     "consumer court",
 ]
 
+
 KYC_PHRASES = [
     "kyc",
     "aadhaar",
@@ -252,15 +355,21 @@ KYC_PHRASES = [
     "update address",
 ]
 
+
 CLOSING_PHRASES = [
     "bye",
     "goodbye",
     "that's all",
+    "thats all",
     "nothing else",
+    "nothing thanks",
+    "nothing thank you",
     "bas",
     "theek hai bye",
     "ok thanks bye",
+    "okay thanks bye",
     "thank you bye",
+    "thanks bye",
 ]
 
 
@@ -270,7 +379,7 @@ def normalize_text(text: str) -> str:
     for source, replacement in DEVANAGARI_REPLACEMENTS.items():
         normalized = normalized.replace(source, replacement)
 
-    normalized = re.sub(r"[^\w\s:./-]", " ", normalized, flags=re.UNICODE)
+    normalized = re.sub(r"[^\w\s:./₹-]", " ", normalized, flags=re.UNICODE)
     normalized = re.sub(r"\s+", " ", normalized).strip()
 
     return normalized
@@ -320,6 +429,7 @@ def detect_language_hint(text: str) -> Language:
         "tomorrow",
         "today",
         "complaint",
+        "waiver",
     ]
 
     if has_any(normalized, english_hints):
@@ -329,6 +439,7 @@ def detect_language_hint(text: str) -> Language:
 
 
 def extract_amount(text: str) -> Optional[float]:
+    raw_text = text or ""
     normalized = normalize_text(text)
 
     patterns = [
@@ -337,14 +448,15 @@ def extract_amount(text: str) -> Optional[float]:
         r"(\d+(?:,\d{3})*(?:\.\d+)?)\s*(?:ka|ki)?\s*(?:payment|amount|emi)",
     ]
 
-    for pattern in patterns:
-        match = re.search(pattern, normalized)
-        if match:
-            raw_amount = match.group(1).replace(",", "")
-            try:
-                return float(raw_amount)
-            except ValueError:
-                return None
+    for source_text in [raw_text.lower(), normalized]:
+        for pattern in patterns:
+            match = re.search(pattern, source_text)
+            if match:
+                raw_amount = match.group(1).replace(",", "")
+                try:
+                    return float(raw_amount)
+                except ValueError:
+                    return None
 
     return None
 
@@ -402,6 +514,20 @@ def extract_date(text: str) -> Optional[str]:
     if "end of week" in normalized or "by friday" in normalized:
         return "end_of_week"
 
+    weekdays = [
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+        "sunday",
+    ]
+
+    for weekday in weekdays:
+        if weekday in normalized:
+            return weekday
+
     date_match = re.search(
         r"\b(\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?)\b",
         normalized,
@@ -419,6 +545,9 @@ def extract_transaction_id(text: str) -> Optional[str]:
         r"(?:transaction id|txn id|reference number|ref number|utr|upi ref|transaction reference)\s*(?:is|:)?\s*([a-z0-9-]{6,})",
         r"\b(utr[a-z0-9-]{6,})\b",
         r"\b(txn[a-z0-9-]{6,})\b",
+        r"\b(okpay[a-z0-9-]{3,})\b",
+        r"\b(miss[a-z0-9-]{3,})\b",
+        r"\b(fail[a-z0-9-]{3,})\b",
     ]
 
     for pattern in patterns:
@@ -471,7 +600,9 @@ def extract_kyc_field(text: str) -> Optional[str]:
 def has_payment_commitment(text: str) -> bool:
     normalized = normalize_text(text)
 
-    return (
+    direct_commitment = has_any(normalized, PROMISE_TO_PAY_PHRASES)
+
+    payment_with_commitment = (
         has_any(normalized, PAYMENT_WORDS)
         and (
             has_any(normalized, COMMITMENT_WORDS)
@@ -479,14 +610,18 @@ def has_payment_commitment(text: str) -> bool:
         )
     )
 
+    return direct_commitment or payment_with_commitment
+
 
 def has_waiver_request(text: str) -> bool:
     normalized = normalize_text(text)
 
-    fee_mentioned = has_any(normalized, ["late fee", "fee", "penalty", "charge"])
-    waiver_asked = has_any(normalized, WAIVER_PHRASES)
+    direct_waiver = has_any(normalized, WAIVER_DIRECT_PHRASES)
 
-    return fee_mentioned and waiver_asked
+    fee_mentioned = has_any(normalized, FEE_WORDS)
+    action_requested = has_any(normalized, WAIVER_ACTION_PHRASES)
+
+    return direct_waiver or (fee_mentioned and action_requested)
 
 
 def detect_intent(text: str) -> Intent:
@@ -556,6 +691,23 @@ def build_entities(text: str) -> ExtractedEntities:
     )
 
 
+def confidence_for_intent(intent: Intent) -> float:
+    if intent == Intent.GENERAL:
+        return 0.45
+
+    if intent in {
+        Intent.PROMISE_TO_PAY,
+        Intent.WAIVER_REQUEST,
+        Intent.PAYMENT_DONE,
+        Intent.PAYMENT_METHOD,
+        Intent.PENALTY_QUESTION,
+        Intent.CLOSING,
+    }:
+        return 0.9
+
+    return 0.85
+
+
 class IntentEntityAgent:
     """
     Rule-based intent and entity extraction agent for NIRA.
@@ -569,11 +721,9 @@ class IntentEntityAgent:
         intent = detect_intent(text)
         entities = build_entities(text)
 
-        confidence = 1.0 if intent != Intent.GENERAL else 0.45
-
         return IntentResult(
             intent=intent,
-            confidence=confidence,
+            confidence=confidence_for_intent(intent),
             entities=entities,
             source="rule_based",
         )
