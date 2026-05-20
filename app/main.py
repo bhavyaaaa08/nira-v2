@@ -1,0 +1,29 @@
+from fastapi import FastAPI
+
+from app.api.call_routes import router as call_router
+
+
+app = FastAPI(
+    title="NIRA v2 API",
+    description="Multi-agent real-time voice intelligence platform for banking customer operations.",
+    version="0.1.0",
+)
+
+
+@app.get("/")
+def root() -> dict:
+    return {
+        "app": "NIRA v2",
+        "status": "running",
+        "description": "Neural Intelligence for Risk & Assistance",
+    }
+
+
+@app.get("/health")
+def health_check() -> dict:
+    return {
+        "status": "healthy",
+    }
+
+
+app.include_router(call_router)
