@@ -134,3 +134,21 @@ class Ticket(BaseModel):
     summary: str
     assigned_team: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.now)
+
+
+class CallSummary(BaseModel):
+    session_id: str
+    customer_name: Optional[str] = None
+    phone: Optional[str] = None
+    phase: CallPhase
+    identity_verified: bool
+    risk_score: int
+    risk_level: RiskLevel
+    payment_status: PaymentStatus
+    outcome: Optional[str] = None
+    outcome_detail: Optional[str] = None
+    summary_text: str
+    key_events: List[str] = Field(default_factory=list)
+    next_actions: List[str] = Field(default_factory=list)
+    customer_commitment: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.now)

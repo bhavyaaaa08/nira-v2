@@ -202,6 +202,20 @@ def latest_judge_score() -> Any:
     result = st.session_state.last_result
     return nested(result, "judge_result", "score")
 
+def fetch_summary(api_base_url: str, session_id: str) -> dict | None:
+    try:
+        response = requests.get(
+            f"{api_base_url}/api/calls/sessions/{session_id}/summary",
+            timeout=10,
+        )
+
+        if response.status_code != 200:
+            return None
+
+        return response.json().get("summary")
+    except requests.RequestException:
+        return None
+
 
 # ─────────────────────────────────────────────
 # Sidebar
@@ -351,8 +365,8 @@ st.divider()
 # Tabs
 # ─────────────────────────────────────────────
 
-tab_chat, tab_trace, tab_customer, tab_raw = st.tabs(
-    ["Conversation", "Decision trace", "Customer + loan", "Raw JSON"]
+tab_chat, tab_trace,tab_summary, tab_customer, tab_raw = st.tabs(
+    ["Conversation", "Decision trace","Summary", "Customer + loan", "Raw JSON"]
 )
 
 with tab_chat:
@@ -445,6 +459,37 @@ with tab_trace:
             st.json(trace)
     else:
         st.caption("Decision trace is empty.")
+
+with tab_summary:
+    st.subheader("Post-call summary")
+
+    summary = fetch_summary(st.session_state.api_base_url,
+    st.session_state.active_session_id,)
+
+    if not summary:
+        st.info("No summary available yet. Complete at least one call turn and refresh.")
+    else:
+        st.markdown("### Summary")
+        st.write(summary.get("summary_text", ""))
+
+        st.markdown("### Key events")
+        key_events = summary.get("key_events", [])
+        if key_events:
+            for event in key_events:
+                st.write(f"- {event}")
+        else:
+            st.caption("No key events found.")
+
+        st.markdown("### Next actions")
+        next_actions = summary.get("next_actions", [])
+        if next_actions:
+            for action in next_actions:
+                st.write(f"- {action}")
+        else:
+            st.caption("No next actions found.")
+
+        st.markdown("### Raw summary JSON")
+        st.json(summary)
 
 with tab_customer:
     st.subheader("Customer profile")

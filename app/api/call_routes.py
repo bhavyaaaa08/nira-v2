@@ -6,11 +6,11 @@ from pydantic import BaseModel, Field
 from app.agents.orchestrator_agent import OrchestratorAgent
 from app.core.enums import Language
 from app.services.session_store import serialize_state, session_store
-
+from app.agents.summary_agent import SummaryAgent
 
 router = APIRouter(prefix="/api/calls", tags=["calls"])
 orchestrator = OrchestratorAgent()
-
+summary_agent = SummaryAgent()
 
 class CreateSessionRequest(BaseModel):
     customer_name: str = "Anita Verma"
@@ -66,8 +66,11 @@ def get_call_session(session_id: str) -> dict:
     if not state:
         raise HTTPException(status_code=404, detail="Session not found")
 
+    summary = summary_agent.summarize(state)
+
     return {
         "session": serialize_state(state),
+        "summary": summary.model_dump(mode="json"),
     }
 
 
@@ -104,6 +107,21 @@ def get_decision_trace(session_id: str) -> dict:
         "session_id": state.session_id,
         "trace_count": len(state.decision_trace),
         "decision_trace": state.decision_trace,
+    }
+
+
+@router.get("/sessions/{session_id}/summary")
+def get_call_summary(session_id: str) -> dict:
+    state = session_store.get_session(session_id)
+
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    summary = summary_agent.summarize(state)
+
+    return {
+        "session_id": session_id,
+        "summary": summary.model_dump(mode="json"),
     }
 
 
