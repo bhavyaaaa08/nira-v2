@@ -84,6 +84,8 @@ def process_call_turn(session_id: str, payload: UserTurnRequest) -> dict:
         channel=payload.channel,
     )
 
+    session_store.save_session(state)
+
     return {
         "message": "turn_processed",
         "result": result.model_dump(mode="json"),
