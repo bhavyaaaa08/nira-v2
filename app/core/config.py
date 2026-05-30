@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     # LLM settings
     llm_enabled: bool = True
     llm_provider: str = "gemini"
-    llm_model: str = "gemini-2.5-flash-lite"
+    llm_model: str = "gemini-2.5-flash"
     llm_timeout_seconds: float = 6.0
 
     # Gemini / Vertex settings

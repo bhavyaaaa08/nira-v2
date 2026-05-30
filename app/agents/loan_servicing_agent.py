@@ -20,6 +20,9 @@ class LoanServicingAgent:
     - contextual confirmation of pending actions
     """
 
+    def _is_hinglish(self, state: CallState) -> bool:
+        return state.language.value in {"hi", "hinglish"}
+
     def __init__(self) -> None:
         self.context_resolver = ContextResolverAgent()
 

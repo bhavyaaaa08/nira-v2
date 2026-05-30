@@ -198,6 +198,12 @@ class LLMClient:
         if end == -1:
             cleaned = cleaned[start:].strip()
             cleaned = cleaned.rstrip(",")
+            # If a string value was left open (odd number of unescaped quotes
+            # after the opening brace), close it before closing the object.
+            content_after_brace = cleaned[1:]
+            unescaped_quotes = len(content_after_brace) - len(content_after_brace.replace('\\"', "").replace('"', ""))
+            if unescaped_quotes % 2 != 0:
+                cleaned = cleaned + '"'
             cleaned = cleaned + "\n}"
         else:
             cleaned = cleaned[start : end + 1]

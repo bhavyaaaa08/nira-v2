@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.core.enums import Language
+
+from app.agents.localization_agent import LocalizationAgent
 from app.agents.compliance_agent import ComplianceAgent
 from app.agents.complaint_agent import ComplaintAgent
 from app.agents.fraud_dispute_agent import FraudDisputeAgent
@@ -14,6 +17,9 @@ from app.agents.payment_operations_agent import PaymentOperationsAgent
 from app.agents.response_judge_agent import ResponseJudgeAgent
 from app.agents.risk_scoring_agent import RiskScoringAgent
 from app.core.config import settings
+
+from app.agents.language_agent import LanguageAgent
+from app.agents.localization_agent import LocalizationAgent
 from app.core.enums import (
     AgentName,
     CallPhase,
@@ -60,8 +66,12 @@ class OrchestratorAgent:
         self.fraud_dispute_agent = FraudDisputeAgent()
         self.complaint_agent = ComplaintAgent()
 
+        self.language_agent = LanguageAgent()
+        self.localization_agent = LocalizationAgent()
+
         self.compliance_agent = ComplianceAgent()
         self.response_judge_agent = ResponseJudgeAgent()
+        self.localization_agent = LocalizationAgent()
 
     def process_turn(
         self,
@@ -75,6 +85,10 @@ class OrchestratorAgent:
             metadata={"channel": channel},
         )
 
+        detected_language = self.language_agent.detect(user_text)
+        if detected_language != Language.UNKNOWN:
+            state.language = detected_language
+
         if not state.identity_verified:
             return self._handle_identity_turn(state, user_text)
 
@@ -85,6 +99,9 @@ class OrchestratorAgent:
             user_text=user_text,
             rule_intent_result=rule_intent_result,
         )
+
+        if intent_result.entities.language_hint:
+            state.language = intent_result.entities.language_hint
 
         state.last_intent = intent_result.intent
 
@@ -400,7 +417,12 @@ class OrchestratorAgent:
             compliance_result=compliance_result,
         )
 
-        final_response = judge_result.final_response
+        final_response = self.localization_agent.localize(
+            response_text=judge_result.final_response,
+            state=state,
+        )
+
+        judge_result.final_response = final_response
 
         actions = list(raw_response.actions)
 
