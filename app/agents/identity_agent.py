@@ -52,6 +52,10 @@ CONFIRMATION_PHRASES = {
 
 WRONG_NUMBER_PHRASES = {
     "wrong number",
+    "no",
+    "no im not",
+    "im not",
+    "dont know",
     "not me",
     "wrong person",
     "i am not",

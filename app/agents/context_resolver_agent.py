@@ -109,14 +109,15 @@ class ContextResolverAgent:
     def _should_try_context_resolution(self, user_text: str, intent: Intent) -> bool:
         normalized = self._normalize(user_text)
 
-        if intent in {Intent.GENERAL, Intent.UNKNOWN}:
-            return True
+        question_markers = [
+            "why", "what", "how", "kyu", "kyun", "kya", "kaise",
+            "laga", "charge", "samajh", "explain", "reason"
+        ]
 
-        # Short replies are often contextual even if a rule misclassifies later.
-        if len(normalized.split()) <= 5:
-            return True
+        if any(marker in normalized for marker in question_markers):
+            return False
 
-        return False
+        return intent in {Intent.UNKNOWN, Intent.GENERAL}
 
     def _is_affirmative(self, text: str) -> bool:
         normalized = self._normalize(text)
@@ -129,7 +130,6 @@ class ContextResolverAgent:
             "ok",
             "okay",
             "sure",
-            "please",
             "please do",
             "do it",
             "do that",

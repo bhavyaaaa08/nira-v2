@@ -1,29 +1,30 @@
 from __future__ import annotations
 
+from typing import Any
+
 from app.agents.compliance_agent import ComplianceAgent
 from app.agents.complaint_agent import ComplaintAgent
 from app.agents.fraud_dispute_agent import FraudDisputeAgent
 from app.agents.identity_agent import IdentityAgent
 from app.agents.intent_entity_agent import IntentEntityAgent
 from app.agents.kyc_agent import KYCAgent
+from app.agents.llm_intent_fallback_agent import LLMIntentFallbackAgent
 from app.agents.loan_servicing_agent import LoanServicingAgent
 from app.agents.payment_operations_agent import PaymentOperationsAgent
 from app.agents.response_judge_agent import ResponseJudgeAgent
 from app.agents.risk_scoring_agent import RiskScoringAgent
+from app.core.config import settings
 from app.core.enums import (
     AgentName,
     CallPhase,
     ComplianceStatus,
     IdentityStatus,
     Intent,
-    RiskLevel,
 )
 from app.core.schemas import (
     AgentDecision,
     AgentResponse,
-    ComplianceResult,
     IntentResult,
-    JudgeResult,
     RiskResult,
     TurnResult,
 )
@@ -37,18 +38,20 @@ class OrchestratorAgent:
     Pipeline:
     1. Add user turn to state
     2. Verify identity if needed
-    3. Detect intent and entities
-    4. Score risk
-    5. Route to specialist agent
-    6. Run compliance check
-    7. Run response judge
-    8. Save decision trace
-    9. Return final response
+    3. Detect rule-based intent/entities
+    4. Use LLM fallback only if rule-based result is weak
+    5. Score risk
+    6. Route to specialist agent
+    7. Run compliance check
+    8. Run response judge
+    9. Save decision trace
+    10. Return final response
     """
 
     def __init__(self) -> None:
         self.identity_agent = IdentityAgent()
         self.intent_agent = IntentEntityAgent()
+        self.llm_intent_fallback_agent = LLMIntentFallbackAgent()
         self.risk_agent = RiskScoringAgent()
 
         self.loan_servicing_agent = LoanServicingAgent()
@@ -75,7 +78,14 @@ class OrchestratorAgent:
         if not state.identity_verified:
             return self._handle_identity_turn(state, user_text)
 
-        intent_result = self.intent_agent.analyze(user_text)
+        rule_intent_result = self.intent_agent.analyze(user_text)
+
+        intent_result, llm_trace = self._apply_llm_intent_fallback(
+            state=state,
+            user_text=user_text,
+            rule_intent_result=rule_intent_result,
+        )
+
         state.last_intent = intent_result.intent
 
         risk_result = self.risk_agent.analyze(
@@ -103,7 +113,76 @@ class OrchestratorAgent:
             risk_result=risk_result,
             agent_decision=agent_decision,
             raw_response=raw_response,
+            llm_trace=llm_trace,
         )
+
+    def _apply_llm_intent_fallback(
+        self,
+        state: CallState,
+        user_text: str,
+        rule_intent_result: IntentResult,
+    ) -> tuple[IntentResult, dict[str, Any]]:
+        """
+        Use LLM only when the rule-based intent result is weak.
+
+        This keeps NIRA safe:
+        - Rule-based agents remain primary.
+        - LLM does not verify identity.
+        - LLM does not verify payment.
+        - LLM does not approve waiver/extension.
+        - LLM does not override compliance.
+        """
+
+        llm_trace: dict[str, Any] = {
+            "rule_intent": rule_intent_result.intent.value,
+            "rule_confidence": rule_intent_result.confidence,
+            "rule_source": rule_intent_result.source,
+            "llm_enabled": settings.llm_enabled,
+            "llm_provider": settings.llm_provider,
+            "llm_model": settings.llm_model,
+            "llm_fallback_attempted": False,
+            "llm_fallback_used": False,
+            "llm_intent": None,
+            "llm_confidence": None,
+            "llm_source": None,
+            "final_intent": rule_intent_result.intent.value,
+            "final_source": rule_intent_result.source,
+        }
+
+        if not self.llm_intent_fallback_agent.should_use_fallback(rule_intent_result):
+            return rule_intent_result, llm_trace
+
+        llm_trace["llm_fallback_attempted"] = True
+
+        llm_intent_result = self.llm_intent_fallback_agent.analyze(
+            user_text=user_text,
+            state=state,
+        )
+
+        llm_trace.update(
+            {
+                "llm_intent": llm_intent_result.intent.value,
+                "llm_confidence": llm_intent_result.confidence,
+                "llm_source": llm_intent_result.source,
+            }
+        )
+
+        should_accept_llm_result = (
+            llm_intent_result.intent not in {Intent.UNKNOWN, Intent.GENERAL}
+            and llm_intent_result.confidence >= rule_intent_result.confidence
+        )
+
+        if should_accept_llm_result:
+            llm_trace.update(
+                {
+                    "llm_fallback_used": True,
+                    "final_intent": llm_intent_result.intent.value,
+                    "final_source": llm_intent_result.source,
+                }
+            )
+            return llm_intent_result, llm_trace
+
+        return rule_intent_result, llm_trace
 
     def _handle_identity_turn(
         self,
@@ -148,6 +227,11 @@ class OrchestratorAgent:
                 risk_result=risk_result,
                 agent_decision=agent_decision,
                 raw_response=raw_response,
+                llm_trace={
+                    "llm_fallback_attempted": False,
+                    "llm_fallback_used": False,
+                    "final_source": "identity_agent",
+                },
             )
 
         if identity_result.status == IdentityStatus.WRONG_NUMBER:
@@ -157,9 +241,11 @@ class OrchestratorAgent:
             state.close(outcome="identity_failed")
 
         intent_result = IntentResult(
-            intent=Intent.WRONG_NUMBER
-            if identity_result.status == IdentityStatus.WRONG_NUMBER
-            else Intent.UNKNOWN,
+            intent=(
+                Intent.WRONG_NUMBER
+                if identity_result.status == IdentityStatus.WRONG_NUMBER
+                else Intent.UNKNOWN
+            ),
             confidence=identity_result.confidence,
             source="identity_agent",
         )
@@ -194,6 +280,11 @@ class OrchestratorAgent:
             risk_result=risk_result,
             agent_decision=agent_decision,
             raw_response=raw_response,
+            llm_trace={
+                "llm_fallback_attempted": False,
+                "llm_fallback_used": False,
+                "final_source": "identity_agent",
+            },
         )
 
     def _decide_agent(
@@ -294,7 +385,10 @@ class OrchestratorAgent:
         risk_result: RiskResult,
         agent_decision: AgentDecision,
         raw_response: AgentResponse,
+        llm_trace: dict[str, Any] | None = None,
     ) -> TurnResult:
+        llm_trace = llm_trace or {}
+
         compliance_result = self.compliance_agent.check(
             response_text=raw_response.response_text,
             state=state,
@@ -310,6 +404,12 @@ class OrchestratorAgent:
 
         actions = list(raw_response.actions)
 
+        if llm_trace.get("llm_fallback_used"):
+            actions.append("llm_intent_fallback_used")
+
+        if llm_trace.get("llm_fallback_attempted") and not llm_trace.get("llm_fallback_used"):
+            actions.append("llm_intent_fallback_attempted")
+
         if compliance_result.status != ComplianceStatus.PASSED:
             actions.append("compliance_rewrite_applied")
 
@@ -322,9 +422,11 @@ class OrchestratorAgent:
             metadata={
                 "agent": agent_decision.selected_agent.value,
                 "intent": intent_result.intent.value,
+                "intent_source": intent_result.source,
                 "risk_score": risk_result.score,
                 "risk_level": risk_result.level.value,
                 "actions": actions,
+                "llm_trace": llm_trace,
             },
         )
 
@@ -332,6 +434,7 @@ class OrchestratorAgent:
             {
                 "user_text": user_text,
                 "detected_intent": intent_result.intent.value,
+                "intent_source": intent_result.source,
                 "entities": intent_result.entities.model_dump(),
                 "selected_agent": agent_decision.selected_agent.value,
                 "agent_reason": agent_decision.reason,
@@ -344,6 +447,7 @@ class OrchestratorAgent:
                 "judge_issues": judge_result.issues,
                 "final_response": final_response,
                 "actions": actions,
+                "llm_trace": llm_trace,
             }
         )
 
