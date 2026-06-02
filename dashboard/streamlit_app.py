@@ -3,9 +3,21 @@ from __future__ import annotations
 import os
 from typing import Any
 
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+
 import pandas as pd
 import requests
 import streamlit as st
+from app.services.tts_service import synthesize_speech_to_file
+
+
+import os
+
+st.caption(f"GCP creds: {os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')}")
+st.caption(f"GCP project: {os.environ.get('GOOGLE_CLOUD_PROJECT')}")
 
 
 DEFAULT_API_BASE_URL = os.getenv("NIRA_API_BASE_URL", "http://127.0.0.1:8000")
@@ -365,9 +377,62 @@ st.divider()
 # Tabs
 # ─────────────────────────────────────────────
 
-tab_chat, tab_trace,tab_summary, tab_customer, tab_raw = st.tabs(
-    ["Conversation", "Decision trace","Summary", "Customer + loan", "Raw JSON"]
+tab_chat, tab_voice, tab_trace, tab_summary, tab_customer, tab_raw = st.tabs(
+    ["Conversation", "Voice Demo", "Decision trace", "Summary", "Customer + loan", "Raw JSON"]
 )
+
+with tab_voice:
+    st.subheader("Voice Demo")
+    st.caption("Manual transcript → NIRA response → GCP Text-to-Speech")
+
+    voice_text = st.text_area(
+        "Manual transcript",
+        placeholder="Example: meri salary nahi aai hai",
+        height=120,
+    )
+
+    tts_language = st.selectbox(
+        "TTS language",
+        options=["hi-IN", "en-IN", "ta-IN"],
+        index=0,
+    )
+
+    voice_map = {
+        "hi-IN": "hi-IN-Wavenet-C",
+        "en-IN": "en-IN-Wavenet-D",
+        "ta-IN": "ta-IN-Wavenet-C",
+    }
+
+    if st.button("Send to NIRA and play voice reply", type="primary"):
+        if not voice_text.strip():
+            st.warning("Please enter a transcript first.")
+        else:
+            try:
+                process_turn(voice_text.strip())
+
+                final_response = nested(
+                    st.session_state.last_result,
+                    "final_response",
+                    default="",
+                )
+
+                if not final_response:
+                    st.warning("No NIRA response received.")
+                    st.stop()
+
+                st.markdown("### NIRA Response")
+                st.success(final_response)
+
+                audio_path = synthesize_speech_to_file(
+                    text=final_response,
+                    language_code=tts_language,
+                )
+
+                with open(audio_path, "rb") as audio_file:
+                    st.audio(audio_file.read(), format="audio/mp3")
+
+            except Exception as exc:
+                st.error(f"Voice demo failed: {exc}")
 
 with tab_chat:
     left, right = st.columns([2, 1])
