@@ -30,6 +30,9 @@ class LoanServicingAgent:
         context_resolution = self.context_resolver.resolve(state, intent_result)
         intent = intent_result.intent
 
+        if intent == Intent.EXPLAIN_PENDING_ACTION:
+            return self._handle_pending_action_explanation(state, context_resolution.pending_action)
+
         if intent == Intent.CONFIRM_PENDING_ACTION:
             return self._handle_pending_action_confirmation(state, context_resolution.pending_action)
 
@@ -490,3 +493,34 @@ class LoanServicingAgent:
         }
 
         return mapping.get(time_text, time_text)
+    
+    def _handle_pending_action_explanation(
+    self,
+    state: CallState,
+    pending_action: PendingAction | None,
+) -> AgentResponse:
+        if pending_action == PendingAction.CONFIRM_EXTENSION_REVIEW:
+            response_text = (
+                "It means I can raise your case for executive review. "
+                "The executive team may check if extension or restructuring is possible, "
+                "but approval is not guaranteed. Would you like me to raise this request?"
+            )
+        elif pending_action == PendingAction.CONFIRM_WAIVER_REVIEW:
+            response_text = (
+                "It means I can raise your late-fee waiver request for review. "
+                "The bank will check policy, repayment history, and eligibility. "
+                "Approval is not guaranteed. Would you like me to raise it?"
+            )
+        else:
+            response_text = (
+                "It means I can mark your request for review by the right team. "
+                "Would you like me to continue?"
+            )
+
+        return AgentResponse(
+            agent_name=AgentName.LOAN_SERVICING,
+            response_text=response_text,
+            next_phase=CallPhase.SERVICING,
+            outcome=state.outcome,
+            actions=["explain_pending_action"],
+        )

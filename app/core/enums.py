@@ -50,6 +50,8 @@ class Intent(str, Enum):
     CANNOT_PAY = "cannot_pay"
     NEEDS_EXTENSION = "needs_extension"
 
+    EXPLAIN_PENDING_ACTION = "explain_pending_action"
+
     PENALTY_QUESTION = "penalty_question"
     WAIVER_REQUEST = "waiver_request"
 

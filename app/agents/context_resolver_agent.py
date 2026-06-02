@@ -21,19 +21,6 @@ class ContextResolution:
 
 
 class ContextResolverAgent:
-    """
-    Resolves vague follow-up replies using CallState memory.
-
-    Example:
-    Assistant: Would you like me to raise an extension review request?
-    User: yes
-    Rule-based intent: GENERAL
-    Context resolver: CONFIRM_PENDING_ACTION + pending_action=CONFIRM_EXTENSION_REVIEW
-
-    This is deterministic now. Later, the fuzzy yes/no classification can be
-    upgraded with Gemini/Groq while keeping final action execution deterministic.
-    """
-
     def resolve(
         self,
         state: CallState,
@@ -58,6 +45,25 @@ class ContextResolverAgent:
                 resolved_intent=original_intent,
                 pending_action=state.pending_action,
                 reason="Current turn has a clear non-contextual intent.",
+            )
+
+        if self._is_clarification_question(user_text):
+            intent_result.intent = Intent.EXPLAIN_PENDING_ACTION
+            intent_result.confidence = 0.91
+            intent_result.source = "context_resolver"
+            intent_result.entities.raw_entities["context_resolution"] = {
+                "resolved": True,
+                "pending_action": state.pending_action.value,
+                "resolution": "clarification_requested",
+            }
+
+            return ContextResolution(
+                resolved=True,
+                original_intent=original_intent,
+                resolved_intent=Intent.EXPLAIN_PENDING_ACTION,
+                pending_action=state.pending_action,
+                confidence=0.91,
+                reason="User asked what the pending action means.",
             )
 
         if self._is_affirmative(user_text):
@@ -109,15 +115,53 @@ class ContextResolverAgent:
     def _should_try_context_resolution(self, user_text: str, intent: Intent) -> bool:
         normalized = self._normalize(user_text)
 
-        question_markers = [
-            "why", "what", "how", "kyu", "kyun", "kya", "kaise",
-            "laga", "charge", "samajh", "explain", "reason"
+        clarification_markers = [
+            "what will happen",
+            "what happens",
+            "what does that mean",
+            "what do you mean",
+            "explain",
+            "meaning",
+            "kya hoga",
+            "usse kya hoga",
+            "uska kya hoga",
+            "kya matlab",
+            "matlab kya",
+            "samjhao",
+            "explain karo",
         ]
 
-        if any(marker in normalized for marker in question_markers):
-            return False
+        if any(marker in normalized for marker in clarification_markers):
+            return True
 
-        return intent in {Intent.UNKNOWN, Intent.GENERAL}
+        if intent in {Intent.GENERAL, Intent.UNKNOWN}:
+            return True
+
+        if len(normalized.split()) <= 5:
+            return True
+
+        return False
+
+    def _is_clarification_question(self, text: str) -> bool:
+        normalized = self._normalize(text)
+
+        phrases = [
+            "what will happen",
+            "what happens",
+            "what does that mean",
+            "what do you mean",
+            "explain",
+            "meaning",
+            "kya hoga",
+            "usse kya hoga",
+            "uska kya hoga",
+            "kya matlab",
+            "matlab kya",
+            "samjhao",
+            "explain karo",
+        ]
+
+        return any(phrase in normalized for phrase in phrases)
 
     def _is_affirmative(self, text: str) -> bool:
         normalized = self._normalize(text)

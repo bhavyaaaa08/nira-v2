@@ -416,7 +416,7 @@ class OrchestratorAgent:
             compliance_result=compliance_result,
         )
 
-        final_response = self.localization_agent.localize(
+        final_response, localization_trace = self.localization_agent.localize_with_trace(
             response_text=judge_result.final_response,
             state=state,
         )
@@ -448,6 +448,7 @@ class OrchestratorAgent:
                 "risk_level": risk_result.level.value,
                 "actions": actions,
                 "llm_trace": llm_trace,
+                "localization_trace": localization_trace,
             },
         )
 
@@ -469,6 +470,7 @@ class OrchestratorAgent:
                 "final_response": final_response,
                 "actions": actions,
                 "llm_trace": llm_trace,
+                "localization_trace": localization_trace,
             }
         )
 

@@ -220,6 +220,19 @@ CANNOT_PAY_PHRASES = [
     "i cannot make the payment",
     "i cant make the payment",
     "i can't make the payment",
+    "salary nahi aai",
+    "salary nahi aayi",
+    "salary nahi ayi",
+    "salary abhi nahi aai",
+    "meri salary nahi aai",
+    "meri salary nahi aayi",
+    "salary late hai",
+    "salary delay",
+    "salary delayed",
+    "salary pending",
+    "pagar nahi aayi",
+    "paise abhi nahi aaye",
+    "paise nahi aaye",
 ]
 
 
@@ -312,6 +325,10 @@ DISPUTE_PHRASES = [
     "not my loan",
     "not mine",
     "mistake",
+    "mera nahi",
+    "mera nahi hai",
+    "loan mera nahi",
+    "ye loan mera nahi",
 ]
 
 
@@ -339,6 +356,9 @@ COMPLAINT_PHRASES = [
     "rude",
     "bad service",
     "consumer court",
+    "mat karo",
+    "call mat karo",
+    "baar baar",
 ]
 
 
@@ -414,6 +434,18 @@ def detect_language_hint(text: str) -> Language:
         "kar dungi",
         "kar dunga",
         "theek",
+        "kyun",
+        "laga",
+        "chahiye",
+        "mujhe",
+        "mera",
+        "mat karo",
+        "baar baar",
+        "meri",
+        "aai",
+        "aayi",
+        "salary nahi",
+        "pagar",
     ]
 
     if has_any(normalized, hinglish_hints):
