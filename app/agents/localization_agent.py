@@ -36,8 +36,8 @@ class LocalizationAgent:
         else:
             return response_text
 
-        prompt = (
-            f"Translate the following banking customer-service response into {target}. "
+        prompt = f"""
+            Translate the following banking customer-service response into {target}. "
             "Rules: preserve exact meaning, keep all amounts/dates/ticket IDs unchanged, "
             "keep it short and voice-friendly, do not add any new information. "
             "Preserve exact meaning.",
@@ -46,8 +46,8 @@ class LocalizationAgent:
             "Keep dates exactly same.",
             "Keep ticket IDs exactly same.",
             'Return only valid JSON in this exact shape: {"localized_response": "<translated text here>"}\n\n'
-            f"Response to translate: {response_text}"
-        )
+            f"Response to translate: {response_text}
+            """
 
         payload = self.llm_client.generate_json(
             prompt=prompt,

@@ -19,7 +19,6 @@ from app.agents.risk_scoring_agent import RiskScoringAgent
 from app.core.config import settings
 
 from app.agents.language_agent import LanguageAgent
-from app.agents.localization_agent import LocalizationAgent
 from app.core.enums import (
     AgentName,
     CallPhase,
