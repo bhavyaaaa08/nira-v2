@@ -408,8 +408,16 @@ info4.metric("Outcome", session.get("outcome") or "not decided")
 
 st.divider()
 
-tab_chat, tab_voice, tab_trace, tab_summary, tab_customer, tab_raw = st.tabs(
-    ["Conversation", "Voice Demo", "Decision trace", "Summary", "Customer + loan", "Raw JSON"]
+tab_chat, tab_voice, tab_trace, tab_analytics, tab_summary, tab_customer, tab_raw = st.tabs(
+    [
+        "Conversation",
+        "Voice Demo",
+        "Decision trace",
+        "Analytics",
+        "Summary",
+        "Customer + loan",
+        "Raw JSON",
+    ]
 )
 
 
@@ -631,6 +639,154 @@ with tab_trace:
             st.json(trace)
     else:
         st.caption("Decision trace is empty.")
+
+with tab_analytics:
+    st.subheader("Call Analytics")
+    st.caption("Session-level operational analytics generated from NIRA decision traces and call state.")
+
+    trace_payload = st.session_state.last_trace or {}
+    trace = trace_payload.get("decision_trace", []) or session.get("decision_trace", [])
+
+    if not trace:
+        st.info("No analytics yet. Complete at least one customer turn first.")
+    else:
+        trace_df = pd.DataFrame(trace)
+
+        total_turns = len(trace_df)
+        escalation_count = int(session.get("escalation_required") is True)
+        complaint_count = int(session.get("complaint_registered") is True)
+        dispute_count = int(session.get("dispute_registered") is True)
+        kyc_count = int(session.get("kyc_request_registered") is True)
+
+        llm_fallback_used_count = 0
+        llm_fallback_attempted_count = 0
+
+        if "llm_trace" in trace_df.columns:
+            for item in trace_df["llm_trace"].dropna():
+                if isinstance(item, dict):
+                    if item.get("llm_fallback_used"):
+                        llm_fallback_used_count += 1
+                    if item.get("llm_fallback_attempted"):
+                        llm_fallback_attempted_count += 1
+
+        avg_judge_score = None
+        if "judge_score" in trace_df.columns:
+            avg_judge_score = pd.to_numeric(
+                trace_df["judge_score"],
+                errors="coerce",
+            ).mean()
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Total turns", total_turns)
+        c2.metric("Current risk", f"{session.get('risk_level', '—')} / {session.get('risk_score', 0)}")
+        c3.metric("Avg judge score", f"{avg_judge_score:.1f}" if pd.notna(avg_judge_score) else "—")
+        c4.metric("LLM fallback used", llm_fallback_used_count)
+
+        c5, c6, c7, c8 = st.columns(4)
+        c5.metric("Complaints", complaint_count)
+        c6.metric("Disputes", dispute_count)
+        c7.metric("KYC requests", kyc_count)
+        c8.metric("Escalations", escalation_count)
+
+        st.divider()
+
+        col_left, col_right = st.columns(2)
+
+        with col_left:
+            st.markdown("### Intent Distribution")
+            if "detected_intent" in trace_df.columns:
+                intent_counts = trace_df["detected_intent"].value_counts().reset_index()
+                intent_counts.columns = ["intent", "count"]
+                st.bar_chart(intent_counts, x="intent", y="count")
+                st.dataframe(intent_counts, use_container_width=True, hide_index=True)
+            else:
+                st.caption("No intent data found.")
+
+        with col_right:
+            st.markdown("### Agent Usage")
+            if "selected_agent" in trace_df.columns:
+                agent_counts = trace_df["selected_agent"].value_counts().reset_index()
+                agent_counts.columns = ["agent", "count"]
+                st.bar_chart(agent_counts, x="agent", y="count")
+                st.dataframe(agent_counts, use_container_width=True, hide_index=True)
+            else:
+                st.caption("No agent data found.")
+
+        st.divider()
+
+        trend_left, trend_right = st.columns(2)
+
+        with trend_left:
+            st.markdown("### Risk Trend")
+            if {"turn_number", "risk_score"}.issubset(trace_df.columns):
+                risk_trend = trace_df[["turn_number", "risk_score"]].copy()
+                risk_trend["risk_score"] = pd.to_numeric(
+                    risk_trend["risk_score"],
+                    errors="coerce",
+                )
+                st.line_chart(risk_trend, x="turn_number", y="risk_score")
+                st.dataframe(risk_trend, use_container_width=True, hide_index=True)
+            else:
+                st.caption("No risk trend data found.")
+
+        with trend_right:
+            st.markdown("### Judge Score Trend")
+            if {"turn_number", "judge_score"}.issubset(trace_df.columns):
+                judge_trend = trace_df[["turn_number", "judge_score"]].copy()
+                judge_trend["judge_score"] = pd.to_numeric(
+                    judge_trend["judge_score"],
+                    errors="coerce",
+                )
+                st.line_chart(judge_trend, x="turn_number", y="judge_score")
+                st.dataframe(judge_trend, use_container_width=True, hide_index=True)
+            else:
+                st.caption("No judge score trend data found.")
+
+        st.divider()
+
+        st.markdown("### Compliance Overview")
+
+        if "compliance_status" in trace_df.columns:
+            compliance_counts = trace_df["compliance_status"].value_counts().reset_index()
+            compliance_counts.columns = ["status", "count"]
+            st.bar_chart(compliance_counts, x="status", y="count")
+            st.dataframe(compliance_counts, use_container_width=True, hide_index=True)
+        else:
+            st.caption("No compliance status data found.")
+
+        if "compliance_violations" in trace_df.columns:
+            violations = []
+
+            for item in trace_df["compliance_violations"].dropna():
+                if isinstance(item, list):
+                    violations.extend(item)
+
+            if violations:
+                violation_df = pd.Series(violations).value_counts().reset_index()
+                violation_df.columns = ["violation", "count"]
+
+                st.markdown("### Compliance Violations")
+                st.dataframe(violation_df, use_container_width=True, hide_index=True)
+            else:
+                st.caption("No compliance violations in this session.")
+
+        st.divider()
+
+        st.markdown("### LLM Fallback Overview")
+
+        llm_cols = st.columns(3)
+        llm_cols[0].metric("Fallback attempted", llm_fallback_attempted_count)
+        llm_cols[1].metric("Fallback used", llm_fallback_used_count)
+
+        fallback_rate = (
+            (llm_fallback_used_count / total_turns) * 100
+            if total_turns > 0
+            else 0
+        )
+        llm_cols[2].metric("Fallback usage rate", f"{fallback_rate:.0f}%")
+
+        with st.expander("Raw analytics dataframe"):
+            st.dataframe(trace_df, use_container_width=True, hide_index=True)
 
 
 with tab_summary:

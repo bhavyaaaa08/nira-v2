@@ -3,9 +3,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.call_routes import router as call_router
+from app.api.voice_ws_routes import router as voice_ws_router
 from app.db.database import init_db
 
-from app.api.voice_ws_routes import router as voice_ws_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -38,5 +38,4 @@ def health_check() -> dict:
 
 
 app.include_router(call_router)
-
 app.include_router(voice_ws_router)

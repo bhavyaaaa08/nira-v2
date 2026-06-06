@@ -21,6 +21,8 @@
       font-weight: bold;
     }
 
+    
+
     #log {
       margin-top: 20px;
       padding: 16px;
@@ -29,6 +31,14 @@
       min-height: 300px;
       white-space: pre-wrap;
       background: #f7f7f7;
+    }
+
+    .status {
+      margin-top: 12px;
+      padding: 10px;
+      border-radius: 6px;
+      background: #eef3ff;
+      font-weight: bold;
     }
   </style>
 </head>
@@ -41,99 +51,294 @@
   <button onclick="connectWebSocket()">Connect</button>
   <button onclick="startRecording()">Start Recording</button>
   <button onclick="stopRecording()">Stop Recording</button>
+  <button onclick="stopNiraAudio()">Interrupt NIRA Speech</button>
 
+  <div id="status" class="status">Status: idle</div>
+  <div id="status" class="status">Status: idle</div>
   <div id="log"></div>
 
-  <script>
-    let socket = null;
-    let mediaRecorder = null;
-    let audioStream = null;
+<script>
+  let socket = null;
+  let mediaRecorder = null;
+  let audioStream = null;
 
-    function log(message) {
-      const logBox = document.getElementById("log");
-      logBox.textContent += message + "\n";
-      logBox.scrollTop = logBox.scrollHeight;
+  let currentNiraAudio = null;
+  let niraIsSpeaking = false;
+  let isRecording = false;
+
+  let vadAudioContext = null;
+  let vadAnalyser = null;
+  let vadSource = null;
+  let vadDataArray = null;
+  let vadRunning = false;
+  let speechFrames = 0;
+
+  const BARGE_IN_VOLUME_THRESHOLD = 0.045;
+  const BARGE_IN_REQUIRED_FRAMES = 6;
+
+  function log(message) {
+    const logBox = document.getElementById("log");
+    logBox.textContent += message + "\n";
+    logBox.scrollTop = logBox.scrollHeight;
+  }
+
+  function setStatus(message) {
+    const statusBox = document.getElementById("status");
+    if (statusBox) {
+      statusBox.textContent = "Status: " + message;
+    }
+  }
+
+  async function ensureMicStream() {
+    if (audioStream) {
+      return audioStream;
     }
 
-    function connectWebSocket() {
-      const sessionId = document.getElementById("sessionId").value.trim();
-
-      if (!sessionId) {
-        alert("Please paste a session ID first.");
-        return;
+    audioStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
       }
+    });
 
-      const wsUrl = `ws://127.0.0.1:8000/ws/voice/${sessionId}`;
-      socket = new WebSocket(wsUrl);
+    return audioStream;
+  }
 
-      socket.onopen = () => {
-        log("Connected to NIRA realtime voice WebSocket.");
-      };
+  async function startBargeInDetector() {
+    const stream = await ensureMicStream();
 
-      socket.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-
-        if (data.type === "partial") {
-          log("Partial: " + data.transcript);
-        }
-
-        if (data.type === "final") {
-          log("Final: " + data.transcript);
-        }
-
-        if (data.type === "nira_response") {
-          log("\nNIRA: " + data.response);
-          log("Intent: " + data.intent);
-          log("Agent: " + data.agent + "\n");
-        }
-
-        if (data.type === "error") {
-          log("Error: " + data.message);
-        }
-      };
-
-      socket.onerror = () => {
-        log("WebSocket error. Check if FastAPI is running.");
-      };
-
-      socket.onclose = () => {
-        log("WebSocket closed.");
-      };
+    if (vadRunning) {
+      return;
     }
 
-    async function startRecording() {
-      if (!socket || socket.readyState !== WebSocket.OPEN) {
-        alert("Connect WebSocket first.");
-        return;
+    vadAudioContext = new AudioContext();
+    vadAnalyser = vadAudioContext.createAnalyser();
+    vadAnalyser.fftSize = 2048;
+
+    vadSource = vadAudioContext.createMediaStreamSource(stream);
+    vadSource.connect(vadAnalyser);
+
+    vadDataArray = new Uint8Array(vadAnalyser.fftSize);
+    vadRunning = true;
+
+    monitorBargeIn();
+    log("Auto barge-in detector started.");
+  }
+
+  function monitorBargeIn() {
+    if (!vadRunning || !vadAnalyser || !vadDataArray) {
+      return;
+    }
+
+    vadAnalyser.getByteTimeDomainData(vadDataArray);
+
+    let sum = 0;
+    for (let i = 0; i < vadDataArray.length; i++) {
+      const value = (vadDataArray[i] - 128) / 128;
+      sum += value * value;
+    }
+
+    const rms = Math.sqrt(sum / vadDataArray.length);
+
+    if (niraIsSpeaking && rms > BARGE_IN_VOLUME_THRESHOLD) {
+      speechFrames += 1;
+    } else {
+      speechFrames = 0;
+    }
+
+    if (niraIsSpeaking && speechFrames >= BARGE_IN_REQUIRED_FRAMES) {
+      log("Auto barge-in detected: customer started speaking.");
+      stopNiraAudio();
+
+      if (!isRecording) {
+        startRecording();
       }
 
-      audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      speechFrames = 0;
+    }
 
-      mediaRecorder = new MediaRecorder(audioStream, {
-        mimeType: "audio/webm;codecs=opus"
+    requestAnimationFrame(monitorBargeIn);
+  }
+
+  function stopNiraAudio() {
+    if (currentNiraAudio) {
+      currentNiraAudio.pause();
+      currentNiraAudio.currentTime = 0;
+      currentNiraAudio = null;
+    }
+
+    if (niraIsSpeaking) {
+      log("NIRA speech interrupted.");
+    }
+
+    niraIsSpeaking = false;
+
+    if (isRecording) {
+      setStatus("listening");
+    } else {
+      setStatus("connected");
+    }
+  }
+
+  function connectWebSocket() {
+    const sessionId = document.getElementById("sessionId").value.trim();
+
+    if (!sessionId) {
+      alert("Please paste a session ID first.");
+      return;
+    }
+
+    const wsUrl = `ws://127.0.0.1:8000/ws/voice/${sessionId}`;
+    socket = new WebSocket(wsUrl);
+
+    socket.onopen = async () => {
+      log("Connected to NIRA realtime voice WebSocket.");
+      setStatus("connected");
+
+      try {
+        await startBargeInDetector();
+      } catch (error) {
+        log("Mic permission needed for auto barge-in: " + error.message);
+      }
+    };
+
+    socket.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+
+      if (data.type === "partial") {
+        log("Partial: " + data.transcript);
+      }
+
+      if (data.type === "final") {
+        log("Final: " + data.transcript);
+        setStatus("processing");
+      }
+
+      if (data.type === "nira_response") {
+        log("\nNIRA: " + data.response);
+        log("Intent: " + data.intent);
+        log("Agent: " + data.agent + "\n");
+      }
+
+      if (data.type === "error") {
+        log("Error: " + data.message);
+        setStatus("error");
+      }
+
+      if (data.type === "tts_audio") {
+        playNiraAudio(data.audio_base64, data.mime_type);
+      }
+
+      if (data.type === "stream_started") {
+        log("Voice stream started.");
+      }
+
+      if (data.type === "stream_stopped") {
+        log("Voice stream stopped.");
+      }
+    };
+
+    socket.onerror = () => {
+      log("WebSocket error. Check if FastAPI is running.");
+      setStatus("websocket error");
+    };
+
+    socket.onclose = () => {
+      log("WebSocket closed.");
+      setStatus("closed");
+    };
+  }
+
+  function playNiraAudio(audioBase64, mimeType) {
+    stopNiraAudio();
+
+    currentNiraAudio = new Audio("data:" + mimeType + ";base64," + audioBase64);
+    niraIsSpeaking = true;
+    setStatus("NIRA speaking");
+
+    currentNiraAudio.onended = () => {
+      niraIsSpeaking = false;
+      currentNiraAudio = null;
+
+      if (isRecording) {
+        setStatus("listening");
+      } else {
+        setStatus("connected");
+      }
+
+      log("NIRA voice response finished.");
+    };
+
+    currentNiraAudio.onerror = () => {
+      niraIsSpeaking = false;
+      currentNiraAudio = null;
+      setStatus("audio playback error");
+      log("Audio playback failed.");
+    };
+
+    currentNiraAudio.play()
+      .then(() => {
+        log("NIRA voice response playing.");
+      })
+      .catch((error) => {
+        niraIsSpeaking = false;
+        currentNiraAudio = null;
+        setStatus("audio playback blocked");
+        log("Audio playback blocked by browser: " + error.message);
       });
+  }
 
-      mediaRecorder.ondataavailable = async (event) => {
-        if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
-          const buffer = await event.data.arrayBuffer();
-          socket.send(buffer);
-        }
-      };
-
-      mediaRecorder.start(250);
-      log("Recording started...");
+  async function startRecording() {
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      alert("Connect WebSocket first.");
+      return;
     }
 
-    function stopRecording() {
-      if (mediaRecorder && mediaRecorder.state !== "inactive") {
-        mediaRecorder.stop();
-        log("Recording stopped.");
-      }
+    stopNiraAudio();
 
-      if (audioStream) {
-        audioStream.getTracks().forEach(track => track.stop());
-      }
+    if (mediaRecorder && mediaRecorder.state === "recording") {
+      return;
     }
-  </script>
+
+    const stream = await ensureMicStream();
+    socket.send("START_STREAM");
+
+    mediaRecorder = new MediaRecorder(stream, {
+      mimeType: "audio/webm;codecs=opus"
+    });
+
+    mediaRecorder.ondataavailable = async (event) => {
+      if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
+        const buffer = await event.data.arrayBuffer();
+        socket.send(buffer);
+      }
+    };
+
+    mediaRecorder.start(250);
+    isRecording = true;
+    setStatus("listening");
+    log("Recording started...");
+  }
+
+  function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== "inactive") {
+      mediaRecorder.stop();
+      log("Recording stopped.");
+    }
+
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send("STOP_STREAM");
+    }
+
+    isRecording = false;
+
+    if (niraIsSpeaking) {
+      setStatus("NIRA speaking");
+    } else {
+      setStatus("connected");
+    }
+  }
+</script>
 </body>
 </html>
