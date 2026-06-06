@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>NIRA Realtime Voice</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 40px;
+      max-width: 900px;
+    }
+
+    input, button {
+      padding: 10px;
+      margin: 6px 0;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    button {
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    #log {
+      margin-top: 20px;
+      padding: 16px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      min-height: 300px;
+      white-space: pre-wrap;
+      background: #f7f7f7;
+    }
+  </style>
+</head>
+<body>
+  <h1>NIRA Realtime Voice Demo</h1>
+
+  <label>Session ID</label>
+  <input id="sessionId" placeholder="Paste active NIRA session ID here" />
+
+  <button onclick="connectWebSocket()">Connect</button>
+  <button onclick="startRecording()">Start Recording</button>
+  <button onclick="stopRecording()">Stop Recording</button>
+
+  <div id="log"></div>
+
+  <script>
+    let socket = null;
+    let mediaRecorder = null;
+    let audioStream = null;
+
+    function log(message) {
+      const logBox = document.getElementById("log");
+      logBox.textContent += message + "\n";
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function connectWebSocket() {
+      const sessionId = document.getElementById("sessionId").value.trim();
+
+      if (!sessionId) {
+        alert("Please paste a session ID first.");
+        return;
+      }
+
+      const wsUrl = `ws://127.0.0.1:8000/ws/voice/${sessionId}`;
+      socket = new WebSocket(wsUrl);
+
+      socket.onopen = () => {
+        log("Connected to NIRA realtime voice WebSocket.");
+      };
+
+      socket.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        if (data.type === "partial") {
+          log("Partial: " + data.transcript);
+        }
+
+        if (data.type === "final") {
+          log("Final: " + data.transcript);
+        }
+
+        if (data.type === "nira_response") {
+          log("\nNIRA: " + data.response);
+          log("Intent: " + data.intent);
+          log("Agent: " + data.agent + "\n");
+        }
+
+        if (data.type === "error") {
+          log("Error: " + data.message);
+        }
+      };
+
+      socket.onerror = () => {
+        log("WebSocket error. Check if FastAPI is running.");
+      };
+
+      socket.onclose = () => {
+        log("WebSocket closed.");
+      };
+    }
+
+    async function startRecording() {
+      if (!socket || socket.readyState !== WebSocket.OPEN) {
+        alert("Connect WebSocket first.");
+        return;
+      }
+
+      audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      mediaRecorder = new MediaRecorder(audioStream, {
+        mimeType: "audio/webm;codecs=opus"
+      });
+
+      mediaRecorder.ondataavailable = async (event) => {
+        if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
+          const buffer = await event.data.arrayBuffer();
+          socket.send(buffer);
+        }
+      };
+
+      mediaRecorder.start(250);
+      log("Recording started...");
+    }
+
+    function stopRecording() {
+      if (mediaRecorder && mediaRecorder.state !== "inactive") {
+        mediaRecorder.stop();
+        log("Recording stopped.");
+      }
+
+      if (audioStream) {
+        audioStream.getTracks().forEach(track => track.stop());
+      }
+    }
+  </script>
+</body>
+</html>

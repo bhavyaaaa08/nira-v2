@@ -1,32 +1,26 @@
 from __future__ import annotations
 
-import os
-from typing import Any
+from datetime import datetime
+from streamlit_mic_recorder import mic_recorder
 
+import os
 import sys
 from pathlib import Path
+from typing import Any
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import pandas as pd
 import requests
 import streamlit as st
+
+from app.services.stt_service import detect_audio_encoding, transcribe_audio_bytes
 from app.services.tts_service import synthesize_speech_to_file
-
-
-import os
-
-st.caption(f"GCP creds: {os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')}")
-st.caption(f"GCP project: {os.environ.get('GOOGLE_CLOUD_PROJECT')}")
 
 
 DEFAULT_API_BASE_URL = os.getenv("NIRA_API_BASE_URL", "http://127.0.0.1:8000")
 REQUEST_TIMEOUT = 15
 
-
-# ─────────────────────────────────────────────
-# Page setup
-# ─────────────────────────────────────────────
 
 st.set_page_config(
     page_title="NIRA v2 Dashboard",
@@ -34,10 +28,6 @@ st.set_page_config(
     layout="wide",
 )
 
-
-# ─────────────────────────────────────────────
-# Session-state defaults
-# ─────────────────────────────────────────────
 
 def init_state() -> None:
     defaults = {
@@ -48,6 +38,10 @@ def init_state() -> None:
         "last_trace": None,
         "last_next_step": None,
         "last_error": None,
+        "last_voice_transcript": None,
+        "last_voice_response": None,
+        "last_voice_audio_path": None,
+        "voice_history": [],
     }
 
     for key, value in defaults.items():
@@ -56,10 +50,6 @@ def init_state() -> None:
 
 init_state()
 
-
-# ─────────────────────────────────────────────
-# API helpers
-# ─────────────────────────────────────────────
 
 def api_url(path: str) -> str:
     base = st.session_state.api_base_url.rstrip("/")
@@ -110,6 +100,10 @@ def create_session(payload: dict[str, Any]) -> None:
     st.session_state.last_trace = None
     st.session_state.last_next_step = data.get("next_step")
     st.session_state.last_error = None
+    st.session_state.last_voice_transcript = None
+    st.session_state.last_voice_response = None
+    st.session_state.last_voice_audio_path = None
+    st.session_state.voice_history = []
 
 
 def refresh_session() -> None:
@@ -163,11 +157,61 @@ def clear_ui_state() -> None:
     st.session_state.last_trace = None
     st.session_state.last_next_step = None
     st.session_state.last_error = None
+    st.session_state.last_voice_transcript = None
+    st.session_state.last_voice_response = None
+    st.session_state.last_voice_audio_path = None
+    st.session_state.voice_history = []
 
 
-# ─────────────────────────────────────────────
-# Data helpers
-# ─────────────────────────────────────────────
+def get_preferred_language() -> str:
+    session = st.session_state.active_session or {}
+    customer = session.get("customer") or {}
+
+    return (
+        customer.get("preferred_language")
+        or session.get("language")
+        or "hi"
+    )
+
+
+def get_stt_language_for_session() -> str:
+    language = get_preferred_language()
+
+    mapping = {
+        "en": "en-IN",
+        "hi": "hi-IN",
+        "hinglish": "hi-IN",
+        "ta": "ta-IN",
+    }
+
+    return mapping.get(language, "hi-IN")
+
+
+def get_stt_alternatives_for_session() -> list[str]:
+    language = get_preferred_language()
+
+    mapping = {
+        "en": ["hi-IN"],
+        "hi": ["en-IN"],
+        "hinglish": ["en-IN"],
+        "ta": ["en-IN"],
+    }
+
+    return mapping.get(language, ["en-IN"])
+
+
+def get_tts_language_for_session() -> str:
+    language = get_preferred_language()
+
+    mapping = {
+        "en": "en-IN",
+        "hi": "hi-IN",
+        "hinglish": "hi-IN",
+        "ta": "ta-IN",
+    }
+
+    return mapping.get(language, "hi-IN")
+
 
 def value(data: dict[str, Any] | None, key: str, default: Any = "—") -> Any:
     if not data:
@@ -214,6 +258,7 @@ def latest_judge_score() -> Any:
     result = st.session_state.last_result
     return nested(result, "judge_result", "score")
 
+
 def fetch_summary(api_base_url: str, session_id: str) -> dict | None:
     try:
         response = requests.get(
@@ -228,10 +273,6 @@ def fetch_summary(api_base_url: str, session_id: str) -> dict | None:
     except requests.RequestException:
         return None
 
-
-# ─────────────────────────────────────────────
-# Sidebar
-# ─────────────────────────────────────────────
 
 with st.sidebar:
     st.title("NIRA v2")
@@ -254,6 +295,7 @@ with st.sidebar:
     due_date = st.text_input("Due date", value="2026-05-01")
     overdue_days = st.number_input("Overdue days", min_value=0, value=8, step=1)
     late_fee = st.number_input("Late fee", min_value=0.0, value=500.0, step=100.0)
+
     preferred_language = st.selectbox(
         "Preferred language",
         options=["en", "hi", "hinglish", "ta"],
@@ -291,6 +333,7 @@ with st.sidebar:
                     st.rerun()
                 except RuntimeError as exc:
                     st.session_state.last_error = str(exc)
+
         with c2:
             if st.button("Delete", use_container_width=True):
                 try:
@@ -327,10 +370,6 @@ with st.sidebar:
                 st.session_state.last_error = str(exc)
 
 
-# ─────────────────────────────────────────────
-# Main page
-# ─────────────────────────────────────────────
-
 st.title("NIRA v2 Command Center")
 st.caption("Realtime dashboard for the custom multi-agent banking operations backend")
 
@@ -352,10 +391,6 @@ customer = session.get("customer") or {}
 loan = session.get("loan") or {}
 conversation = session.get("conversation") or []
 
-# ─────────────────────────────────────────────
-# Top summary cards
-# ─────────────────────────────────────────────
-
 st.subheader("Live call state")
 
 card1, card2, card3, card4, card5 = st.columns(5)
@@ -373,66 +408,135 @@ info4.metric("Outcome", session.get("outcome") or "not decided")
 
 st.divider()
 
-# ─────────────────────────────────────────────
-# Tabs
-# ─────────────────────────────────────────────
-
 tab_chat, tab_voice, tab_trace, tab_summary, tab_customer, tab_raw = st.tabs(
     ["Conversation", "Voice Demo", "Decision trace", "Summary", "Customer + loan", "Raw JSON"]
 )
 
+
 with tab_voice:
     st.subheader("Voice Demo")
-    st.caption("Manual transcript → NIRA response → GCP Text-to-Speech")
+    st.caption("Upload customer audio or enter a transcript, then generate NIRA's voice response.")
 
-    voice_text = st.text_area(
-        "Manual transcript",
+    st.markdown("### Record from microphone")
+
+    mic_audio = mic_recorder(
+        start_prompt="Start recording",
+        stop_prompt="Stop recording",
+        just_once=False,
+        use_container_width=True,
+        key="voice_mic_recorder",
+    )
+
+    uploaded_audio = st.file_uploader(
+        "Upload customer audio",
+        type=["wav", "mp3", "webm"],
+    )
+
+    manual_text = st.text_area(
+        "Manual transcript fallback",
         placeholder="Example: meri salary nahi aai hai",
-        height=120,
+        height=100,
     )
 
-    tts_language = st.selectbox(
-        "TTS language",
-        options=["hi-IN", "en-IN", "ta-IN"],
-        index=0,
-    )
+    if st.button("Process voice turn", type="primary"):
+        try:
+            transcript = manual_text.strip()
+            input_mode = "manual"
 
-    voice_map = {
-        "hi-IN": "hi-IN-Wavenet-C",
-        "en-IN": "en-IN-Wavenet-D",
-        "ta-IN": "ta-IN-Wavenet-C",
-    }
+            if mic_audio and not transcript:
+                audio_bytes = mic_audio["bytes"]
+                encoding = detect_audio_encoding("recording.wav")
+                input_mode = "microphone"
 
-    if st.button("Send to NIRA and play voice reply", type="primary"):
-        if not voice_text.strip():
-            st.warning("Please enter a transcript first.")
-        else:
-            try:
-                process_turn(voice_text.strip())
-
-                final_response = nested(
-                    st.session_state.last_result,
-                    "final_response",
-                    default="",
+                transcript = transcribe_audio_bytes(
+                    audio_bytes=audio_bytes,
+                    language_code=get_stt_language_for_session(),
+                    alternative_language_codes=get_stt_alternatives_for_session(),
+                    encoding=encoding,
                 )
 
-                if not final_response:
-                    st.warning("No NIRA response received.")
-                    st.stop()
+            elif uploaded_audio is not None and not transcript:
+                audio_bytes = uploaded_audio.getvalue()
+                encoding = detect_audio_encoding(uploaded_audio.name)
+                input_mode = "audio"
 
-                st.markdown("### NIRA Response")
-                st.success(final_response)
-
-                audio_path = synthesize_speech_to_file(
-                    text=final_response,
-                    language_code=tts_language,
+                transcript = transcribe_audio_bytes(
+                    audio_bytes=audio_bytes,
+                    language_code=get_stt_language_for_session(),
+                    alternative_language_codes=get_stt_alternatives_for_session(),
+                    encoding=encoding,
                 )
 
-                with open(audio_path, "rb") as audio_file:
-                    st.audio(audio_file.read(), format="audio/mp3")
+            if not transcript:
+                st.error("Please upload audio or enter a manual transcript.")
+                st.stop()
 
-            except Exception as exc:
-                st.error(f"Voice demo failed: {exc}")
+            process_turn(transcript)
+
+            final_response = nested(
+                st.session_state.last_result,
+                "final_response",
+                default="",
+            )
+
+            if not final_response:
+                st.warning("No NIRA response received.")
+                st.stop()
+
+            audio_path = synthesize_speech_to_file(
+                text=final_response,
+                language_code=get_tts_language_for_session(),
+            )
+
+            st.session_state.last_voice_transcript = transcript
+            st.session_state.last_voice_response = final_response
+            st.session_state.last_voice_audio_path = audio_path
+
+            st.session_state.voice_history.append(
+                {
+                    "timestamp": datetime.now().strftime("%H:%M:%S"),
+                    "input_mode": input_mode,
+                    "transcript": transcript,
+                    "response": final_response,
+                    "audio_path": audio_path,
+                }
+            )
+
+            st.rerun()
+
+        except Exception as exc:
+            st.error(f"Voice demo failed: {exc}")
+
+    if st.session_state.last_voice_transcript:
+        st.markdown("### Transcript")
+        st.info(st.session_state.last_voice_transcript)
+
+    if st.session_state.last_voice_response:
+        st.markdown("### NIRA Response")
+        st.success(st.session_state.last_voice_response)
+
+    audio_path = st.session_state.last_voice_audio_path
+    if audio_path and os.path.exists(audio_path):
+        st.markdown("### Audio Reply")
+        with open(audio_path, "rb") as audio_file:
+            st.audio(audio_file.read(), format="audio/mp3")
+
+
+        if st.session_state.voice_history:
+            st.markdown("### Voice Interaction History")
+
+            for index, item in enumerate(reversed(st.session_state.voice_history), start=1):
+                with st.expander(f"Voice turn {index} • {item['timestamp']} • {item['input_mode']}"):
+                    st.markdown("**Transcript**")
+                    st.write(item["transcript"])
+
+                    st.markdown("**NIRA Response**")
+                    st.write(item["response"])
+
+                    history_audio_path = item.get("audio_path")
+                    if history_audio_path and os.path.exists(history_audio_path):
+                        st.audio(history_audio_path)
+
 
 with tab_chat:
     left, right = st.columns([2, 1])
@@ -454,6 +558,7 @@ with tab_chat:
 
     with right:
         st.subheader("Latest NIRA response")
+
         final_response = nested(st.session_state.last_result, "final_response", default=None)
         if final_response:
             st.success(final_response)
@@ -462,6 +567,7 @@ with tab_chat:
 
         st.subheader("Latest actions")
         actions = nested(st.session_state.last_result, "actions", default=[])
+
         if actions:
             for action in actions:
                 st.write(f"- {action}")
@@ -476,6 +582,7 @@ with tab_chat:
         except RuntimeError as exc:
             st.session_state.last_error = str(exc)
             st.rerun()
+
 
 with tab_trace:
     st.subheader("Latest reasoning snapshot")
@@ -525,11 +632,14 @@ with tab_trace:
     else:
         st.caption("Decision trace is empty.")
 
+
 with tab_summary:
     st.subheader("Post-call summary")
 
-    summary = fetch_summary(st.session_state.api_base_url,
-    st.session_state.active_session_id,)
+    summary = fetch_summary(
+        st.session_state.api_base_url,
+        st.session_state.active_session_id,
+    )
 
     if not summary:
         st.info("No summary available yet. Complete at least one call turn and refresh.")
@@ -539,6 +649,7 @@ with tab_summary:
 
         st.markdown("### Key events")
         key_events = summary.get("key_events", [])
+
         if key_events:
             for event in key_events:
                 st.write(f"- {event}")
@@ -547,6 +658,7 @@ with tab_summary:
 
         st.markdown("### Next actions")
         next_actions = summary.get("next_actions", [])
+
         if next_actions:
             for action in next_actions:
                 st.write(f"- {action}")
@@ -555,6 +667,7 @@ with tab_summary:
 
         st.markdown("### Raw summary JSON")
         st.json(summary)
+
 
 with tab_customer:
     st.subheader("Customer profile")
@@ -581,7 +694,9 @@ with tab_customer:
         "escalation_required": session.get("escalation_required"),
         "escalation_offered": session.get("escalation_offered"),
     }
+
     st.json(flags)
+
 
 with tab_raw:
     st.subheader("Current session object")
