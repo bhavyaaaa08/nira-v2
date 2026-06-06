@@ -8,6 +8,9 @@ from app.db.database import init_db
 
 from app.services.operations_store import operations_store
 
+from app.api.operations_routes import router as operations_router
+
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -42,3 +45,4 @@ def health_check() -> dict:
 
 app.include_router(call_router)
 app.include_router(voice_ws_router)
+app.include_router(operations_router)

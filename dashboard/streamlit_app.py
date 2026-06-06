@@ -16,7 +16,7 @@ import streamlit as st
 
 from app.services.stt_service import detect_audio_encoding, transcribe_audio_bytes
 from app.services.tts_service import synthesize_speech_to_file
-
+from data.seed_data import get_demo_profiles
 
 DEFAULT_API_BASE_URL = os.getenv("NIRA_API_BASE_URL", "http://127.0.0.1:8000")
 REQUEST_TIMEOUT = 15
@@ -47,6 +47,16 @@ def init_state() -> None:
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
 
+def profile_label(profile: dict[str, Any]) -> str:
+    customer = profile.get("customer") or {}
+    loan = profile.get("loan") or {}
+
+    return (
+        f"{customer.get('customer_id')} • "
+        f"{customer.get('name')} • "
+        f"{customer.get('phone')} • "
+        f"{loan.get('status', 'no-loan')}"
+    )
 
 init_state()
 
@@ -289,17 +299,62 @@ with st.sidebar:
     st.divider()
     st.subheader("Create demo session")
 
-    customer_name = st.text_input("Customer name", value="Anita Verma")
-    phone = st.text_input("Phone", value="9876543210")
-    loan_amount = st.number_input("Loan amount", min_value=0.0, value=50000.0, step=1000.0)
-    due_date = st.text_input("Due date", value="2026-05-01")
-    overdue_days = st.number_input("Overdue days", min_value=0, value=8, step=1)
-    late_fee = st.number_input("Late fee", min_value=0.0, value=500.0, step=100.0)
+    profiles = get_demo_profiles()
+
+    selected_profile = st.selectbox(
+        "Demo customer profile",
+        options=profiles,
+        format_func=profile_label,
+    )
+
+    selected_customer = selected_profile.get("customer") or {}
+    selected_loan = selected_profile.get("loan") or {}
+
+    customer_name = st.text_input(
+        "Customer name",
+        value=selected_customer.get("name", "Anita Verma"),
+    )
+
+    phone = st.text_input(
+        "Phone",
+        value=selected_customer.get("phone", "9876543210"),
+    )
+
+    loan_amount = st.number_input(
+        "Loan amount",
+        min_value=0.0,
+        value=float(selected_loan.get("loan_amount", 50000) or 50000),
+        step=1000.0,
+    )
+
+    due_date = st.text_input(
+        "Due date",
+        value=selected_loan.get("due_date", "2026-05-01"),
+    )
+
+    overdue_days = st.number_input(
+        "Overdue days",
+        min_value=0,
+        value=int(selected_loan.get("overdue_days", 8) or 8),
+        step=1,
+    )
+
+    late_fee = st.number_input(
+        "Late fee",
+        min_value=0.0,
+        value=float(selected_loan.get("late_fee", 500) or 500),
+        step=100.0,
+    )
+
+    language_options = ["en", "hi", "hinglish", "ta"]
+    selected_language = selected_customer.get("preferred_language", "en")
 
     preferred_language = st.selectbox(
         "Preferred language",
-        options=["en", "hi", "hinglish", "ta"],
-        index=0,
+        options=language_options,
+        index=language_options.index(selected_language)
+        if selected_language in language_options
+        else 0,
     )
 
     create_clicked = st.button("Create new call session", type="primary", use_container_width=True)

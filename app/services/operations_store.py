@@ -250,4 +250,67 @@ class OperationsStore:
             conn.commit()
 
 
+    def list_tickets(self, limit: int = 50) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM operation_tickets
+                ORDER BY created_at DESC
+                LIMIT ?;
+                """,
+                (limit,),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+
+    def list_payment_commitments(self, limit: int = 50) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM payment_commitments
+                ORDER BY created_at DESC
+                LIMIT ?;
+                """,
+                (limit,),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+
+    def list_voice_interactions(self, limit: int = 50) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM voice_interactions
+                ORDER BY created_at DESC
+                LIMIT ?;
+                """,
+                (limit,),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+
+    def get_session_operations(self, session_id: str) -> dict[str, Any]:
+        with self._connect() as conn:
+            tickets = conn.execute(
+                "SELECT * FROM operation_tickets WHERE session_id = ? ORDER BY created_at DESC;",
+                (session_id,),
+            ).fetchall()
+
+            commitments = conn.execute(
+                "SELECT * FROM payment_commitments WHERE session_id = ? ORDER BY created_at DESC;",
+                (session_id,),
+            ).fetchall()
+
+            voice_interactions = conn.execute(
+                "SELECT * FROM voice_interactions WHERE session_id = ? ORDER BY created_at DESC;",
+                (session_id,),
+            ).fetchall()
+
+        return {
+            "session_id": session_id,
+            "tickets": [dict(row) for row in tickets],
+            "payment_commitments": [dict(row) for row in commitments],
+            "voice_interactions": [dict(row) for row in voice_interactions],
+        }
+
 operations_store = OperationsStore()

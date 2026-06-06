@@ -1,0 +1,6 @@
+payment_id,customer_id,loan_id,amount,status,transaction_id,payment_date
+1,1,101,50000,pending_verification,OKPAY123,2026-05-09
+2,2,102,18000,verified,OKRAH123,2026-06-01
+3,4,104,30000,partial,PARTAMIT123,2026-05-10
+4,7,107,0,failed,FAILPRIYA123,2026-05-12
+5,10,110,0,not_paid,, 

@@ -1,0 +1,11 @@
+customer_id,name,phone,preferred_language,city,risk_profile
+1,Anita Verma,9876543210,en,Delhi,medium
+2,Rahul Sharma,9876500011,hinglish,Mumbai,low
+3,Meena Iyer,9876500012,ta,Chennai,medium
+4,Amit Kumar,9876500013,hi,Patna,high
+5,Sneha Rao,9876500014,en,Bengaluru,low
+6,Harsh Beniwal,9876543211,en,Delhi,medium
+7,Priya Nair,9876500016,en,Kochi,high
+8,Farhan Khan,9876500017,hinglish,Lucknow,medium
+9,Kavya R,9876500018,ta,Coimbatore,low
+10,Rohit Mehta,9876500019,hi,Jaipur,critical
