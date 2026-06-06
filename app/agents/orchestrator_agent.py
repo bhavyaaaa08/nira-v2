@@ -18,6 +18,8 @@ from app.agents.response_judge_agent import ResponseJudgeAgent
 from app.agents.risk_scoring_agent import RiskScoringAgent
 from app.core.config import settings
 
+from app.services.audit_logger import audit_logger
+
 from app.agents.language_agent import LanguageAgent
 from app.core.enums import (
     AgentName,
@@ -472,6 +474,32 @@ class OrchestratorAgent:
                 "llm_trace": llm_trace,
                 "localization_trace": localization_trace,
             }
+        )
+
+        audit_logger.log_event(
+            session_id=state.session_id,
+            event_type="turn_processed",
+            source="orchestrator_agent",
+            payload={
+                "turn_number": state.turn_number,
+                "channel": "unknown",
+                "user_text": user_text,
+                "detected_intent": intent_result.intent.value,
+                "intent_source": intent_result.source,
+                "selected_agent": agent_decision.selected_agent.value,
+                "risk_score": risk_result.score,
+                "risk_level": risk_result.level.value,
+                "compliance_status": compliance_result.status.value,
+                "compliance_violations": compliance_result.violations,
+                "judge_score": judge_result.score,
+                "judge_issues": judge_result.issues,
+                "actions": actions,
+                "final_response": final_response,
+                "llm_trace": llm_trace,
+                "localization_trace": localization_trace,
+                "outcome": state.outcome,
+                "payment_status": state.payment_status.value,
+            },
         )
 
         return TurnResult(

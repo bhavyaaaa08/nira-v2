@@ -11,6 +11,7 @@ from google.cloud import speech_v1 as speech
 from app.agents.orchestrator_agent import OrchestratorAgent
 from app.services.session_store import session_store
 from app.services.tts_service import synthesize_speech_to_file
+from app.services.audit_logger import audit_logger
 
 
 router = APIRouter()
@@ -79,6 +80,15 @@ async def realtime_voice_ws(websocket: WebSocket, session_id: str):
         )
         await websocket.close()
         return
+    
+    audit_logger.log_event(
+        session_id=session_id,
+        event_type="realtime_voice_connected",
+        source="voice_ws_routes",
+        payload={
+            "message": "Realtime voice WebSocket connected.",
+        },
+    )
 
     loop = asyncio.get_running_loop()
 
@@ -179,6 +189,14 @@ async def realtime_voice_ws(websocket: WebSocket, session_id: str):
                         }
                     )
 
+                    send_json_from_thread(
+                        {
+                            "type": "tts_audio",
+                            "audio_base64": audio_base64,
+                            "mime_type": "audio/mp3",
+                        }
+                    )
+
         except Exception as exc:
             message = str(exc)
 
@@ -214,6 +232,15 @@ async def realtime_voice_ws(websocket: WebSocket, session_id: str):
             }
         )
 
+        audit_logger.log_event(
+            session_id=session_id,
+            event_type="voice_stream_started",
+            source="voice_ws_routes",
+            payload={
+                "message": "Google STT stream started.",
+            },
+        )
+
         return active_stream
 
     async def close_active_audio_stream() -> None:
@@ -232,6 +259,14 @@ async def realtime_voice_ws(websocket: WebSocket, session_id: str):
             }
         )
 
+        audit_logger.log_event(
+            session_id=session_id,
+            event_type="voice_stream_stopped",
+            source="voice_ws_routes",
+            payload={
+                "message": "Google STT stream stopped.",
+            },
+        )
     try:
         while True:
             message = await websocket.receive()
@@ -253,6 +288,14 @@ async def realtime_voice_ws(websocket: WebSocket, session_id: str):
 
     except WebSocketDisconnect:
         await close_active_audio_stream()
+        audit_logger.log_event(
+            session_id=session_id,
+            event_type="realtime_voice_disconnected",
+            source="voice_ws_routes",
+            payload={
+                "message": "Realtime voice WebSocket disconnected.",
+            },
+        )
 
     except Exception as exc:
         await close_active_audio_stream()
@@ -261,6 +304,15 @@ async def realtime_voice_ws(websocket: WebSocket, session_id: str):
                 "type": "error",
                 "message": f"Realtime voice WebSocket failed: {exc}",
             }
+        )
+
+        audit_logger.log_event(
+            session_id=session_id,
+            event_type="realtime_voice_error",
+            source="voice_ws_routes",
+            payload={
+                "error": str(exc),
+            },
         )
 
     finally:
