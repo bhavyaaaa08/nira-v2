@@ -3,7 +3,7 @@ from __future__ import annotations
 from app.core.enums import AgentName, CallPhase, RiskLevel, TicketCategory
 from app.core.schemas import AgentResponse, IntentResult, Ticket
 from app.core.state import CallState
-
+from app.services.operations_store import operations_store
 
 class KYCAgent:
     """
@@ -24,6 +24,22 @@ class KYCAgent:
 
         kyc_field = intent_result.entities.kyc_field or "kyc_details"
         ticket = self.create_ticket(state, kyc_field)
+        operations_store.create_ticket(
+            ticket_id=ticket.ticket_id,
+            session_id=state.session_id,
+            customer_name=state.customer.name if state.customer else None,
+            phone=state.customer.phone if state.customer else None,
+            category=ticket.category.value,
+            priority=ticket.priority.value,
+            status=ticket.status.value,
+            summary=ticket.summary,
+            assigned_team=ticket.assigned_team,
+            source_agent=AgentName.KYC.value,
+            metadata={
+                **ticket.model_dump(),
+                "kyc_field": kyc_field,
+            },
+        )
 
         readable_field = self._readable_field(kyc_field)
 

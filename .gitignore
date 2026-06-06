@@ -11,3 +11,5 @@ env/
 .DS_Store
 .vscode/
 .idea/
+*.db-shm
+*.db-wal

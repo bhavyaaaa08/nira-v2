@@ -5,6 +5,8 @@ from app.core.enums import AgentName, CallPhase, Intent, PendingAction
 from app.core.schemas import AgentResponse, IntentResult
 from app.core.state import CallState
 
+from app.services.operations_store import operations_store
+
 
 class LoanServicingAgent:
     """
@@ -124,6 +126,20 @@ class LoanServicingAgent:
         state.mark_commitment(
             time_text=commitment_time,
             amount=entities.amount,
+        )
+
+        operations_store.create_payment_commitment(
+            session_id=state.session_id,
+            customer_name=state.customer.name if state.customer else None,
+            phone=state.customer.phone if state.customer else None,
+            commitment_amount=entities.amount,
+            commitment_time=commitment_time,
+            payment_status=state.payment_status.value,
+            source_agent=AgentName.LOAN_SERVICING.value,
+            metadata={
+                "user_text": state.last_user_text,
+                "intent": intent_result.intent.value,
+            },
         )
 
         amount_text = (

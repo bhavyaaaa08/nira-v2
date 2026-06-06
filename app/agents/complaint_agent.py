@@ -4,6 +4,8 @@ from app.core.enums import AgentName, CallPhase, RiskLevel, TicketCategory
 from app.core.schemas import AgentResponse, IntentResult, Ticket
 from app.core.state import CallState
 
+from app.services.operations_store import operations_store
+
 
 class ComplaintAgent:
     """
@@ -27,6 +29,20 @@ class ComplaintAgent:
         )
 
         ticket = self.create_ticket(state, complaint_reason)
+
+        operations_store.create_ticket(
+            ticket_id=ticket.ticket_id,
+            session_id=state.session_id,
+            customer_name=state.customer.name if state.customer else None,
+            phone=state.customer.phone if state.customer else None,
+            category=ticket.category.value,
+            priority=ticket.priority.value,
+            status=ticket.status.value,
+            summary=ticket.summary,
+            assigned_team=ticket.assigned_team,
+            source_agent=AgentName.COMPLAINT.value,
+            metadata=ticket.model_dump(),
+        )
 
         return AgentResponse(
             agent_name=AgentName.COMPLAINT,

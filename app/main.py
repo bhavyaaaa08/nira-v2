@@ -6,10 +6,13 @@ from app.api.call_routes import router as call_router
 from app.api.voice_ws_routes import router as voice_ws_router
 from app.db.database import init_db
 
+from app.services.operations_store import operations_store
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    operations_store.init_db()
     yield
 
 

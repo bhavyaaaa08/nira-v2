@@ -13,6 +13,8 @@ from app.services.session_store import session_store
 from app.services.tts_service import synthesize_speech_to_file
 from app.services.audit_logger import audit_logger
 
+from app.services.operations_store import operations_store
+
 
 router = APIRouter()
 orchestrator = OrchestratorAgent()
@@ -189,12 +191,19 @@ async def realtime_voice_ws(websocket: WebSocket, session_id: str):
                         }
                     )
 
-                    send_json_from_thread(
-                        {
-                            "type": "tts_audio",
-                            "audio_base64": audio_base64,
-                            "mime_type": "audio/mp3",
-                        }
+                    operations_store.create_voice_interaction(
+                        session_id=state.session_id,
+                        transcript=transcript,
+                        response_text=turn_result.final_response,
+                        intent=turn_result.intent_result.intent.value,
+                        agent=turn_result.agent_decision.selected_agent.value,
+                        audio_path=audio_path,
+                        channel="realtime_voice",
+                        metadata={
+                            "risk_score": turn_result.risk_result.score,
+                            "risk_level": turn_result.risk_result.level.value,
+                            "judge_score": turn_result.judge_result.score,
+                        },
                     )
 
         except Exception as exc:
