@@ -2,15 +2,16 @@ services:
   nira-api:
     build: .
     container_name: nira-api
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     ports:
       - "8000:8000"
     env_file:
       - .env
     volumes:
+      - ./app:/app/app
+      - ./data:/app/data
       - ./audit_logs:/app/audit_logs
       - ./tmp_audio:/app/tmp_audio
-      - ./data:/app/data
       - ./nira.db:/app/nira.db
       - ./credentials:/app/credentials:ro
     restart: unless-stopped
@@ -26,9 +27,11 @@ services:
     environment:
       - NIRA_API_BASE_URL=http://nira-api:8000
     volumes:
+      - ./app:/app/app
+      - ./dashboard:/app/dashboard
+      - ./data:/app/data
       - ./audit_logs:/app/audit_logs
       - ./tmp_audio:/app/tmp_audio
-      - ./data:/app/data
       - ./nira.db:/app/nira.db
       - ./credentials:/app/credentials:ro
     depends_on:

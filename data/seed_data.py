@@ -83,10 +83,39 @@ def get_demo_profiles() -> list[dict[str, Any]]:
                 "customer": customer,
                 "loan": loan,
                 "payments": payments,
+                "tickets": get_tickets_for_customer(customer_id),
+                "commitments": get_commitments_for_customer(customer_id),
             }
         )
 
     return profiles
+
+def get_seed_tickets() -> list[dict[str, Any]]:
+    return load_csv("tickets.csv")
+
+
+def get_seed_commitments() -> list[dict[str, Any]]:
+    return load_csv("payment_commitments.csv")
+
+
+def get_tickets_for_customer(customer_id: str | int) -> list[dict[str, Any]]:
+    target_id = str(customer_id).strip()
+
+    return [
+        ticket
+        for ticket in get_seed_tickets()
+        if str(ticket.get("customer_id", "")).strip() == target_id
+    ]
+
+
+def get_commitments_for_customer(customer_id: str | int) -> list[dict[str, Any]]:
+    target_id = str(customer_id).strip()
+
+    return [
+        commitment
+        for commitment in get_seed_commitments()
+        if str(commitment.get("customer_id", "")).strip() == target_id
+    ]
 
 if __name__ == "__main__":
     for profile in get_demo_profiles():

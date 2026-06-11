@@ -6,6 +6,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from app.services.automation_client import automation_client
+
 
 DB_PATH = Path("nira.db")
 
@@ -158,6 +160,22 @@ class OperationsStore:
                 ),
             )
             conn.commit()
+
+        automation_client.trigger_ticket_created(
+            {
+                "ticket_id": ticket_id,
+                "session_id": session_id,
+                "customer_name": customer_name,
+                "phone": phone,
+                "category": category,
+                "priority": priority,
+                "status": status,
+                "summary": summary,
+                "assigned_team": assigned_team,
+                "source_agent": source_agent,
+                "metadata": metadata or {},
+            }
+        )
 
     def create_payment_commitment(
         self,

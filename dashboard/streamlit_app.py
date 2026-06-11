@@ -310,6 +310,10 @@ with st.sidebar:
     selected_customer = selected_profile.get("customer") or {}
     selected_loan = selected_profile.get("loan") or {}
 
+    selected_payments = selected_profile.get("payments") or []
+    selected_tickets = selected_profile.get("tickets") or []
+    selected_commitments = selected_profile.get("commitments") or []
+
     customer_name = st.text_input(
         "Customer name",
         value=selected_customer.get("name", "Anita Verma"),
@@ -356,6 +360,16 @@ with st.sidebar:
         if selected_language in language_options
         else 0,
     )
+
+    with st.expander("Selected profile history"):
+        st.markdown("**Payments**")
+        st.json(selected_payments)
+
+        st.markdown("**Historical tickets**")
+        st.json(selected_tickets)
+
+        st.markdown("**Historical commitments**")
+        st.json(selected_commitments)
 
     create_clicked = st.button("Create new call session", type="primary", use_container_width=True)
     if create_clicked:

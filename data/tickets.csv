@@ -1,0 +1,6 @@
+ticket_id,customer_id,session_id,category,status,priority,summary,assigned_team,created_at
+COMP-RAHUL-001,2,seed-history,complaint,closed,medium,Customer previously complained about repeated reminder calls.,complaint_resolution_team,2026-05-20
+FRAUD-PRIYA-001,7,seed-history,fraud,in_review,critical,Customer reported possible unauthorized loan activity.,fraud_review_team,2026-05-12
+KYC-MEENA-001,3,seed-history,kyc,open,medium,Customer requested address update in KYC.,kyc_operations_team,2026-05-22
+DISP-ROHIT-001,10,seed-history,dispute,open,high,Customer disputed overdue amount and late fee calculation.,dispute_resolution_team,2026-05-25
+COMP-FARHAN-001,8,seed-history,complaint,open,medium,Customer reported confusion about partial payment options.,complaint_resolution_team,2026-05-28

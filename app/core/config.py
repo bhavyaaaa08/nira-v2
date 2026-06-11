@@ -5,6 +5,10 @@ class Settings(BaseSettings):
     app_name: str = "NIRA"
     env: str = "development"
 
+    n8n_enabled: bool = False
+    n8n_ticket_webhook_url: str | None = None
+    n8n_timeout_seconds: int = 8
+
     gemini_api_key: str = ""
     google_application_credentials: str = ""
 
